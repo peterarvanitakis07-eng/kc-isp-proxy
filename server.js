@@ -172,7 +172,7 @@ app.get('/api/lookup', async (req, res) => {
         zip: zip,
         benchmark: 'Public_AR_Current',
         vintage: 'Current_Current',
-        layers: 'Census Blocks',
+        layers: '10',
         format: 'json'
       },
       timeout: 15000
@@ -185,7 +185,12 @@ app.get('/api/lookup', async (req, res) => {
 
     const match = matches[0];
     const coords = match.coordinates;
-    const blocks = match.geographies?.['Census Blocks'];
+    const blocks = match.geographies?.['Census Blocks'] || 
+                   match.geographies?.['2020 Census Blocks'] ||
+                   match.geographies?.['Census Blocks 2020'] || [];
+
+    // Debug: log what geography keys came back
+    console.log('Geography keys returned:', Object.keys(match.geographies || {}));
 
     if (!blocks || blocks.length === 0) {
       return res.json({ success: false, message: 'Address found but census block could not be determined.' });
