@@ -256,6 +256,8 @@ async function getBrowser() {
   if (!_browser || !_browser.isConnected()) {
     _browser = await chromium.launch({
       headless: true,
+      // Use system Chromium on Railway (set via CHROMIUM_PATH env var in Dockerfile)
+      executablePath: process.env.CHROMIUM_PATH || undefined,
       args: [
         '--no-sandbox', '--disable-setuid-sandbox',
         '--disable-dev-shm-usage', '--disable-gpu',
