@@ -2,5 +2,5 @@
 builder = "NIXPACKS"
 
 [deploy]
-healthcheckPath = "/api/health"
-healthcheckTimeout = 30
+healthcheckPath = "/"
+healthcheckTimeout = 15

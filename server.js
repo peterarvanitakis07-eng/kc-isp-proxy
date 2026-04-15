@@ -327,21 +327,18 @@ async function scrapeStarlink(lat, lon) {
 }
 
 // ── /api/health ───────────────────────────────────────────────────
-// Tests AT&T API reachability using KCDD's own address (public).
-// Set this as Railway's health check URL.
+// Fast liveness check — Railway uses / for healthcheck, this is for manual testing.
+// Call /api/health?test=att to do a live AT&T API reachability check.
 app.get('/api/health', async (req, res) => {
-  try {
-    const result = await scrapeATT('1801 Linwood Blvd', 'Kansas City', 'MO', '64109');
-    res.json({
-      status: 'ok',
-      attApi: result.status !== 'error' ? 'reachable' : 'error',
-      attResult: result.status,
-      playwright: chromium ? 'loaded' : 'unavailable',
-      ts: new Date().toISOString()
-    });
-  } catch (err) {
-    res.status(500).json({ status: 'degraded', error: err.message, ts: new Date().toISOString() });
+  if (req.query.test === 'att') {
+    try {
+      const result = await scrapeATT('1801 Linwood Blvd', 'Kansas City', 'MO', '64109');
+      return res.json({ status: 'ok', attApi: result.status !== 'error' ? 'reachable' : 'error', attResult: result.status, ts: new Date().toISOString() });
+    } catch (err) {
+      return res.status(500).json({ status: 'degraded', error: err.message, ts: new Date().toISOString() });
+    }
   }
+  res.json({ status: 'ok', version: '3.0.0', ts: new Date().toISOString() });
 });
 
 // ── /api/live-prices ──────────────────────────────────────────────
