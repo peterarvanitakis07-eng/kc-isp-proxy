@@ -265,7 +265,23 @@ async function scrapeATT(address, city, state, zip) {
     const { data } = await axios.post(
       'https://www.att.com/services/shop/model/ecom/shop/view/unified/qualification/service/CheckAvailabilityRESTService/invokeCheckAvailability',
       { userInputZip: zip, userInputAddressLine1: address, mode: 'fullAddress', customer_type: 'Consumer', dtvMigrationFlag: false },
-      { headers: { 'Content-Type': 'application/json', 'User-Agent': SCRAPER_UA }, timeout: 12000 }
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'User-Agent': SCRAPER_UA,
+          'Origin': 'https://www.att.com',
+          'Referer': 'https://www.att.com/internet/',
+          'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"macOS"',
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'same-origin',
+        },
+        timeout: 12000
+      }
     );
     const p = data?.profile || data?.customerProfile || {};
     const fiber = !!(p.isGIGAFiberAvailable || p.isFiberAvailable);
@@ -333,7 +349,15 @@ app.get('/api/health', async (req, res) => {
   if (req.query.test === 'att') {
     try {
       const result = await scrapeATT('1801 Linwood Blvd', 'Kansas City', 'MO', '64109');
-      return res.json({ status: 'ok', attApi: result.status !== 'error' ? 'reachable' : 'error', attResult: result.status, ts: new Date().toISOString() });
+      return res.json({
+        status: 'ok',
+        attApi: result.status !== 'error' ? 'reachable' : 'error',
+        attResult: result.status,
+        attError: result.error || null,       // ← full error message
+        attPlans: result.plans || [],
+        attServiceType: result.serviceType || null,
+        ts: new Date().toISOString()
+      });
     } catch (err) {
       return res.status(500).json({ status: 'degraded', error: err.message, ts: new Date().toISOString() });
     }
