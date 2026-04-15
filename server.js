@@ -241,76 +241,21 @@ app.get('/api/lookup', async (req, res) => {
 // Bot detection may cause failures; UI falls back to static data.
 // ═══════════════════════════════════════════════════════════════════
 
-let chromium = null;
-try {
-  chromium = require('playwright').chromium;
-  console.log('✓ Playwright loaded — live ISP price scraping enabled');
-} catch (e) {
-  console.warn('Playwright not available — /api/live-prices will return errors:', e.message);
-}
-
-// Shared browser instance — lazy-started, reused across requests
-let _browser = null;
-async function getBrowser() {
-  if (!chromium) throw new Error('Playwright not installed on this server');
-  if (!_browser || !_browser.isConnected()) {
-    _browser = await chromium.launch({
-      headless: true,
-      // Use system Chromium on Railway (set via CHROMIUM_PATH env var in Dockerfile)
-      executablePath: process.env.CHROMIUM_PATH || undefined,
-      args: [
-        '--no-sandbox', '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage', '--disable-gpu',
-        '--disable-extensions', '--no-first-run'
-      ]
-    });
-    console.log('Browser instance started');
-  }
-  return _browser;
-}
-
 const SCRAPER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-const SCRAPER_TIMEOUT = 18000;
 
-// ── Helper: fill an address input using multiple fallback selectors ──
-async function fillAddressInput(page, fullAddress) {
-  const candidates = [
-    'input[aria-label*="address" i]',
-    'input[placeholder*="address" i]',
-    'input[name*="address" i]',
-    'input[id*="address" i]',
-    'input[data-testid*="address" i]',
-    'input[class*="address" i]',
-    'input[type="text"]:visible'
-  ];
-  for (const sel of candidates) {
-    try {
-      const el = await page.$(sel);
-      if (el) { await el.fill(fullAddress); return true; }
-    } catch (_) {}
-  }
-  return false;
-}
-
-// ── Helper: extract $XX/mo price chips from rendered DOM ──
-function extractPrices(page) {
-  return page.evaluate(() => {
-    const results = [];
-    const seen = new Set();
-    document.querySelectorAll('*').forEach(el => {
-      if (el.children.length > 0) return; // leaf nodes only
-      const text = (el.textContent || '').trim();
-      if (!/^\$\d/.test(text)) return;
-      if (seen.has(text)) return;
-      seen.add(text);
-      const card = el.closest('[class*="plan"], [class*="tier"], [class*="package"], [class*="offer"], article, section, li');
-      const name = card?.querySelector('h1,h2,h3,h4,[class*="name"],[class*="title"]')?.textContent?.trim();
-      const speed = card?.querySelector('[class*="speed"],[class*="mbps"],[class*="gig"]')?.textContent?.trim();
-      if (name || speed) {
-        results.push({ price: text, name: name || 'Internet Plan', speed: speed || null });
-      }
-    });
-    return results.slice(0, 8); // cap at 8 plans
+// ── Browser-based scrapers: returns a "check website" stub ───────
+// Spectrum, Xfinity, T-Mobile, Cox require a headless browser to scrape.
+// Railway's nixpacks build doesn't include Chromium — these will be enabled
+// in a future update once browser hosting is configured.
+function browserRequiredScraper(ispName, url) {
+  return async () => ({
+    isp: ispName,
+    status: 'browser-required',
+    source: 'none',
+    plans: [],
+    checkUrl: url,
+    error: 'Live pricing requires browser automation not yet available on this server. Check provider website directly.',
+    ts: new Date().toISOString()
   });
 }
 
@@ -352,83 +297,11 @@ async function scrapeATT(address, city, state, zip) {
   }
 }
 
-// ── Spectrum: Playwright ──────────────────────────────────────────
-async function scrapeSpectrum(address, city, state, zip) {
-  const browser = await getBrowser();
-  const ctx = await browser.newContext({ userAgent: SCRAPER_UA, locale: 'en-US' });
-  const page = await ctx.newPage();
-  try {
-    await page.goto('https://www.spectrum.com/internet', { timeout: SCRAPER_TIMEOUT, waitUntil: 'domcontentloaded' });
-    const filled = await fillAddressInput(page, `${address}, ${city}, ${state} ${zip}`);
-    if (!filled) throw new Error('No address input found on Spectrum page');
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(4000);
-    const plans = await extractPrices(page);
-    return { isp: 'Spectrum', status: plans.length ? 'available' : 'error', source: 'browser', plans, ts: new Date().toISOString() };
-  } catch (err) {
-    return { isp: 'Spectrum', status: 'error', source: 'browser', error: err.message, plans: [] };
-  } finally {
-    await ctx.close().catch(() => {});
-  }
-}
-
-// ── Xfinity: Playwright ───────────────────────────────────────────
-async function scrapeXfinity(address, city, state, zip) {
-  const browser = await getBrowser();
-  const ctx = await browser.newContext({ userAgent: SCRAPER_UA, locale: 'en-US' });
-  const page = await ctx.newPage();
-  try {
-    await page.goto('https://www.xfinity.com/buy/internet', { timeout: SCRAPER_TIMEOUT, waitUntil: 'domcontentloaded' });
-    const filled = await fillAddressInput(page, `${address}, ${city}, ${state} ${zip}`);
-    if (!filled) throw new Error('No address input found on Xfinity page');
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(4000);
-    const plans = await extractPrices(page);
-    return { isp: 'Xfinity', status: plans.length ? 'available' : 'error', source: 'browser', plans, ts: new Date().toISOString() };
-  } catch (err) {
-    return { isp: 'Xfinity', status: 'error', source: 'browser', error: err.message, plans: [] };
-  } finally {
-    await ctx.close().catch(() => {});
-  }
-}
-
-// ── T-Mobile Home Internet: Playwright ───────────────────────────
-async function scrapeTMobile(address, city, state, zip) {
-  const browser = await getBrowser();
-  const ctx = await browser.newContext({ userAgent: SCRAPER_UA, locale: 'en-US' });
-  const page = await ctx.newPage();
-  try {
-    await page.goto('https://www.t-mobile.com/home-internet', { timeout: SCRAPER_TIMEOUT, waitUntil: 'domcontentloaded' });
-    const filled = await fillAddressInput(page, `${address}, ${city}, ${state} ${zip}`);
-    if (!filled) throw new Error('No address input found on T-Mobile page');
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(4500);
-    // T-Mobile shows availability message + a single plan price
-    const result = await page.evaluate(() => {
-      const body = document.body.textContent || '';
-      const avail    = /great news|available at your address|home internet available/i.test(body);
-      const notAvail = /not available|not supported|sorry/i.test(body);
-      const priceMatch = body.match(/\$(\d+(?:\.\d+)?)\/mo/);
-      return { avail, notAvail, price: priceMatch ? priceMatch[0] : null };
-    });
-    if (result.notAvail) {
-      return { isp: 'T-Mobile', status: 'unavailable', source: 'browser', plans: [], ts: new Date().toISOString() };
-    }
-    return {
-      isp: 'T-Mobile',
-      status: result.avail ? 'available' : 'unknown',
-      source: 'browser',
-      plans: (result.avail && result.price)
-        ? [{ name: 'T-Mobile Home Internet', speed: '33–245 Mbps', price: result.price }]
-        : [],
-      ts: new Date().toISOString()
-    };
-  } catch (err) {
-    return { isp: 'T-Mobile', status: 'error', source: 'browser', error: err.message, plans: [] };
-  } finally {
-    await ctx.close().catch(() => {});
-  }
-}
+// Browser-based scrapers — stubs until Chromium hosting is configured
+const scrapeSpectrum = browserRequiredScraper('Spectrum', 'https://www.spectrum.com/internet');
+const scrapeXfinity  = browserRequiredScraper('Xfinity',  'https://www.xfinity.com/buy/internet');
+const scrapeTMobile  = browserRequiredScraper('T-Mobile', 'https://www.t-mobile.com/home-internet');
+const scrapeCox      = browserRequiredScraper('Cox',      'https://www.cox.com/residential/internet.html');
 
 // ── Starlink: direct coordinate API (no browser) ─────────────────
 // Uses lat/lon from the geocoding step — no address re-entry needed
@@ -450,26 +323,6 @@ async function scrapeStarlink(lat, lon) {
     };
   } catch (err) {
     return { isp: 'Starlink', status: 'error', source: 'api', error: err.message, plans: [] };
-  }
-}
-
-// ── Cox Communications: Playwright ───────────────────────────────
-async function scrapeCox(address, city, state, zip) {
-  const browser = await getBrowser();
-  const ctx = await browser.newContext({ userAgent: SCRAPER_UA, locale: 'en-US' });
-  const page = await ctx.newPage();
-  try {
-    await page.goto('https://www.cox.com/residential/internet.html', { timeout: SCRAPER_TIMEOUT, waitUntil: 'domcontentloaded' });
-    const filled = await fillAddressInput(page, `${address}, ${city}, ${state} ${zip}`);
-    if (!filled) throw new Error('No address input found on Cox page');
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(4000);
-    const plans = await extractPrices(page);
-    return { isp: 'Cox', status: plans.length ? 'available' : 'error', source: 'browser', plans, ts: new Date().toISOString() };
-  } catch (err) {
-    return { isp: 'Cox', status: 'error', source: 'browser', error: err.message, plans: [] };
-  } finally {
-    await ctx.close().catch(() => {});
   }
 }
 
