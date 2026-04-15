@@ -354,7 +354,20 @@ async function scrapeStarlink(lat, lon) {
       ts: new Date().toISOString()
     };
   } catch (err) {
-    return { isp: 'Starlink', status: 'error', source: 'api', error: err.message, plans: [] };
+    // Starlink eligibility API unavailable — fall back to standard residential pricing.
+    // Starlink generally covers the KC metro; navigator should confirm at starlink.com.
+    console.warn('Starlink live API failed (' + err.message + ') — returning static plans');
+    return {
+      isp: 'Starlink',
+      status: 'available-static',
+      source: 'static',
+      plans: [
+        { name: 'Starlink Residential', speed: '50–200 Mbps', price: '$120/mo', note: 'Equipment: $599 one-time or $599 deposit w/ rental option' },
+      ],
+      note: 'Coverage may vary — confirm availability at starlink.com.',
+      checkUrl: 'https://www.starlink.com/order',
+      ts: new Date().toISOString()
+    };
   }
 }
 
