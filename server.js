@@ -309,7 +309,23 @@ async function scrapeATT(address, city, state, zip) {
       ts: new Date().toISOString()
     };
   } catch (err) {
-    return { isp: 'AT&T', status: 'error', source: 'api', error: err.message, plans: [] };
+    // AT&T's consumer API endpoint is unstable / changes without notice.
+    // Fall back to standard KC metro plans from the aLEGEND reference sheet.
+    // Navigators should verify exact plan availability at att.com/internet/availability.
+    console.warn('AT&T live API failed (' + err.message + ') — returning aLEGEND static plans');
+    return {
+      isp: 'AT&T',
+      status: 'available-static',
+      source: 'static',
+      plans: [
+        { name: 'Internet 300',  speed: '300 Mbps', price: '$55/mo' },
+        { name: 'Internet 1000', speed: '1 Gbps',   price: '$80/mo' },
+        { name: 'AT&T Access',   speed: '100 Mbps', price: '$10/mo', lowIncome: true, elig: 'SNAP, SSI, Medicaid, Free School Lunch' },
+      ],
+      note: 'Standard KC plans from aLEGEND reference sheet. Verify exact availability at att.com.',
+      checkUrl: 'https://www.att.com/internet/availability/',
+      ts: new Date().toISOString()
+    };
   }
 }
 
