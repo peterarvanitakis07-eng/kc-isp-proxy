@@ -233,6 +233,46 @@ app.get('/api/lookup', async (req, res) => {
   }
 });
 
+// ── ENDPOINT 4: FCC location_id lookup ───────────────────────────────────────
+// Usage: /api/fcc-location?lat=39.07&lon=-94.56&address=1801+Linwood+Blvd
+// Returns the FCC Broadband Map location_id so the verification link shows
+// provider availability dots (green dots) instead of just centering the map.
+app.get('/api/fcc-location', async (req, res) => {
+  const { lat, lon, address } = req.query;
+  if (!lat || !lon) {
+    return res.status(400).json({ success: false, message: 'lat and lon are required' });
+  }
+  try {
+    const searchTerm = address || `${lat},${lon}`;
+    const { data } = await axios.post(
+      'https://broadbandmap.fcc.gov/api/public/map/listLocations',
+      { search_term: searchTerm, latitude: parseFloat(lat), longitude: parseFloat(lon) },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': SCRAPER_UA,
+          'Referer': 'https://broadbandmap.fcc.gov/',
+          'Origin': 'https://broadbandmap.fcc.gov'
+        },
+        timeout: 8000
+      }
+    );
+    const locations = data?.data || data?.locations || data?.results || [];
+    if (!locations.length) {
+      return res.json({ success: false, message: 'No FCC location found' });
+    }
+    // Pick the closest location — first result is usually best match
+    const locationId = locations[0]?.location_id || locations[0]?.id || null;
+    if (!locationId) return res.json({ success: false, message: 'Location found but no ID returned' });
+    res.json({ success: true, location_id: locationId });
+  } catch (err) {
+    // Non-fatal — front-end falls back to coordinate-only URL
+    console.warn('FCC location lookup failed:', err.message);
+    res.json({ success: false, error: err.message });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // ISP LIVE PRICE SCRAPERS
 // Fetches real-time plan pricing from ISP websites.
