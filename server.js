@@ -332,10 +332,10 @@ async function scrapeATT(address, city, state, zip) {
     if (fiber) {
       plans.push({ name: 'Internet 300',  speed: '300 Mbps', price: '$55/mo' });
       plans.push({ name: 'Internet 1000', speed: '1 Gbps',   price: '$80/mo' });
-      plans.push({ name: 'AT&T Access',   speed: '100 Mbps', price: '$10/mo', lowIncome: true, elig: 'SNAP, SSI, Medicaid, Free Lunch' });
+      plans.push({ name: 'AT&T Access',   speed: '100 Mbps', price: '$30/mo', lowIncome: true, elig: 'SNAP, SSI, Medicaid, Free Lunch' });
     } else if (dsl) {
       plans.push({ name: 'Internet 10',       speed: '10 Mbps', price: '$55/mo' });
-      plans.push({ name: 'AT&T Access (DSL)', speed: '10 Mbps', price: '$10/mo', lowIncome: true, elig: 'SNAP, SSI, Medicaid, Free Lunch' });
+      plans.push({ name: 'AT&T Access (DSL)', speed: '10 Mbps', price: '$30/mo', lowIncome: true, elig: 'SNAP, SSI, Medicaid, Free Lunch' });
     } else if (air) {
       plans.push({ name: 'Internet Air', speed: 'Up to 25 Mbps', price: '$55/mo' });
     }
@@ -360,7 +360,7 @@ async function scrapeATT(address, city, state, zip) {
       plans: [
         { name: 'Internet 300',  speed: '300 Mbps', price: '$55/mo' },
         { name: 'Internet 1000', speed: '1 Gbps',   price: '$80/mo' },
-        { name: 'AT&T Access',   speed: '100 Mbps', price: '$10/mo', lowIncome: true, elig: 'SNAP, SSI, Medicaid, Free School Lunch' },
+        { name: 'AT&T Access',   speed: '100 Mbps', price: '$30/mo', lowIncome: true, elig: 'SNAP, SSI, Medicaid, Free School Lunch' },
       ],
       note: 'Standard KC plans from aLEGEND reference sheet. Verify exact availability at att.com.',
       checkUrl: 'https://www.att.com/internet/availability/',
